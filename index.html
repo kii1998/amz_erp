@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>亚马逊商家ERP - SKU与BOM管理系统</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 引入Lucide图标库 -->
+    <script src="https://unpkg.com/lucide-react@0.292.0/dist/lucide-react.js"></script>
+    <!-- 引入Inter字体 -->
+    <link rel="preconnect" href="https://rsms.me/">
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <style>
+        :root { font-family: 'Inter', sans-serif; }
+        @supports (font-variation-settings: normal) {
+            :root { font-family: 'Inter var', sans-serif; }
+        }
+        /* 自定义滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-content {
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        /* 添加一个简单的加载动画 */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-overlay {
+             position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+
+    <!-- 加载遮罩层 -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loader"></div>
+    </div>
+
+    <div class="flex h-screen">
+        <!-- 侧边导航栏 -->
+        <aside class="w-64 bg-white shadow-md flex flex-col">
+            <div class="p-6 text-2xl font-bold text-slate-700 border-b">
+                <span class="text-blue-600">亚马逊</span> ERP
+            </div>
+            <nav class="flex-1 p-4">
+                <ul>
+                    <li>
+                        <a href="#" id="nav-dashboard" class="nav-link active flex items-center p-3 rounded-lg text-slate-700 bg-blue-100 font-semibold">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-3"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+                            仪表盘
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" id="nav-sku" class="nav-link flex items-center p-3 rounded-lg text-slate-600 hover:bg-slate-200 hover:font-semibold">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-3"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                            SKU 管理
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" id="nav-bom" class="nav-link flex items-center p-3 rounded-lg text-slate-600 hover:bg-slate-200 hover:font-semibold">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-3"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m15.5 8.5-3 3-3-3"/></svg>
+                            BOM 管理
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            <div class="p-4 border-t">
+                <p class="text-sm text-slate-500">&copy; 2025 YourCompany Inc.</p>
+            </div>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="flex-1 p-8 overflow-y-auto">
+            
+            <!-- 仪表盘页面 -->
+            <div id="page-dashboard" class="page">
+                <h1 class="text-3xl font-bold mb-6">仪表盘</h1>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-slate-500 text-sm font-medium">总SKU数量</h2>
+                        <p id="stat-total-sku" class="text-3xl font-bold mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-slate-500 text-sm font-medium">成品BOM数量</h2>
+                        <p id="stat-total-bom" class="text-3xl font-bold mt-2">0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-slate-500 text-sm font-medium">库存总成本</h2>
+                        <p id="stat-total-cost" class="text-3xl font-bold mt-2">¥0.00</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-slate-500 text-sm font-medium">低库存SKU</h2>
+                        <p id="stat-low-stock" class="text-3xl font-bold mt-2 text-orange-500">0</p>
+                    </div>
+                </div>
+                <div class="mt-8 bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-bold mb-4">低库存预警 (库存 &lt; 20)</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b bg-slate-50">
+                                    <th class="p-3">SKU</th>
+                                    <th class="p-3">产品名称</th>
+                                    <th class="p-3">当前库存</th>
+                                    <th class="p-3">供应商</th>
+                                </tr>
+                            </thead>
+                            <tbody id="low-stock-table-body">
+                                <!-- 低库存项目将动态插入此处 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SKU管理页面 -->
+            <div id="page-sku" class="page hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold">SKU 管理</h1>
+                    <button id="add-sku-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition">新增SKU</button>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <input type="text" id="sku-search" class="w-full mb-4 p-2 border rounded-lg" placeholder="按SKU或产品名称搜索...">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b bg-slate-50">
+                                    <th class="p-3">图片</th>
+                                    <th class="p-3">SKU</th>
+                                    <th class="p-3">产品名称</th>
+                                    <th class="p-3">供应商</th>
+                                    <th class="p-3">成本 (¥)</th>
+                                    <th class="p-3">库存</th>
+                                    <th class="p-3">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sku-table-body">
+                                <!-- SKU数据将动态插入此处 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOM管理页面 -->
+            <div id="page-bom" class="page hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-3xl font-bold">BOM 管理</h1>
+                    <button id="add-bom-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition">创建BOM</button>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <input type="text" id="bom-search" class="w-full mb-4 p-2 border rounded-lg" placeholder="按成品SKU或名称搜索...">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="border-b bg-slate-50">
+                                    <th class="p-3">成品SKU</th>
+                                    <th class="p-3">成品名称</th>
+                                    <th class="p-3">组件数量</th>
+                                    <th class="p-3">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bom-table-body">
+                                <!-- BOM数据将动态插入此处 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- SKU表单 Modal -->
+    <div id="sku-modal" class="modal-backdrop hidden">
+        <div class="bg-white w-full max-w-lg p-8 rounded-lg shadow-xl modal-content">
+            <h2 id="sku-modal-title" class="text-2xl font-bold mb-6">新增SKU</h2>
+            <form id="sku-form">
+                <input type="hidden" id="sku-id">
+                <div class="mb-4">
+                    <label for="sku-code" class="block text-sm font-medium text-slate-600 mb-1">SKU编码</label>
+                    <input type="text" id="sku-code" class="w-full p-2 border rounded-lg" required>
+                </div>
+                <div class="mb-4">
+                    <label for="sku-name" class="block text-sm font-medium text-slate-600 mb-1">产品名称</label>
+                    <input type="text" id="sku-name" class="w-full p-2 border rounded-lg" required>
+                </div>
+                <div class="mb-4">
+                    <label for="sku-supplier" class="block text-sm font-medium text-slate-600 mb-1">供应商</label>
+                    <input type="text" id="sku-supplier" class="w-full p-2 border rounded-lg">
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label for="sku-cost" class="block text-sm font-medium text-slate-600 mb-1">成本 (¥)</label>
+                        <input type="number" id="sku-cost" class="w-full p-2 border rounded-lg" required min="0" step="0.01">
+                    </div>
+                    <div>
+                        <label for="sku-stock" class="block text-sm font-medium text-slate-600 mb-1">库存</label>
+                        <input type="number" id="sku-stock" class="w-full p-2 border rounded-lg" required min="0">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4">
+                    <button type="button" id="cancel-sku-modal" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold hover:bg-slate-300">取消</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- BOM表单 Modal -->
+    <div id="bom-modal" class="modal-backdrop hidden">
+        <div class="bg-white w-full max-w-2xl p-8 rounded-lg shadow-xl modal-content">
+            <h2 id="bom-modal-title" class="text-2xl font-bold mb-6">创建BOM</h2>
+            <form id="bom-form">
+                <input type="hidden" id="bom-id">
+                <div class="mb-4">
+                    <label for="bom-finished-product" class="block text-sm font-medium text-slate-600 mb-1">选择成品SKU</label>
+                    <select id="bom-finished-product" class="w-full p-2 border rounded-lg" required></select>
+                </div>
+                
+                <h3 class="text-lg font-semibold mt-6 mb-2">组件列表</h3>
+                <div class="bg-slate-50 p-4 rounded-lg">
+                    <div id="bom-components-list" class="space-y-3 mb-4">
+                        <!-- 组件将动态添加至此 -->
+                    </div>
+                    <div class="flex gap-4 items-end">
+                        <div class="flex-1">
+                             <label for="bom-component-sku" class="block text-sm font-medium text-slate-600 mb-1">添加组件SKU</label>
+                            <select id="bom-component-sku" class="w-full p-2 border rounded-lg"></select>
+                        </div>
+                        <div class="w-24">
+                            <label for="bom-component-qty" class="block text-sm font-medium text-slate-600 mb-1">数量</label>
+                            <input type="number" id="bom-component-qty" class="w-full p-2 border rounded-lg" min="1" value="1">
+                        </div>
+                        <button type="button" id="add-component-btn" class="bg-green-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600">添加</button>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4 mt-8">
+                    <button type="button" id="cancel-bom-modal" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold hover:bg-slate-300">取消</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">保存BOM</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 删除确认 Modal -->
+    <div id="confirm-delete-modal" class="modal-backdrop hidden">
+        <div class="bg-white w-full max-w-sm p-8 rounded-lg shadow-xl">
+            <h2 class="text-xl font-bold mb-4">确认删除</h2>
+            <p id="delete-message" class="text-slate-600 mb-6">您确定要删除这个项目吗？此操作无法撤销。</p>
+            <div class="flex justify-end gap-4">
+                <button id="cancel-delete-btn" class="bg-slate-200 px-4 py-2 rounded-lg font-semibold hover:bg-slate-300">取消</button>
+                <button id="confirm-delete-btn" class="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700">确认删除</button>
+            </div>
+        </div>
+    </div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // --- SUPABASE 设置 ---
+    // 1. 将 'YOUR_SUPABASE_URL' 和 'YOUR_SUPABASE_ANON_KEY' 替换为您自己的 Supabase 项目信息。
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+    const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+    // **FIX**: 在尝试创建客户端之前，检查凭据是否已填写。
+    if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL' || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+        document.body.innerHTML = `
+            <div class="flex items-center justify-center h-screen bg-slate-100">
+                <div class="p-8 bg-white rounded-lg shadow-lg text-center max-w-md mx-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-16 h-16 text-red-500 mx-auto mb-4"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                    <h1 class="text-2xl font-bold text-red-600 mb-4">配置错误</h1>
+                    <p class="text-slate-700">无法连接到数据库。请在HTML文件的 &lt;script&gt; 标签中配置您的 Supabase URL 和 Anon Key。</p>
+                    <p class="mt-2 text-sm text-slate-500">查找 <code>SUPABASE_URL</code> 和 <code>SUPABASE_ANON_KEY</code> 变量进行修改。</p>
+                </div>
+            </div>`;
+        return; // 停止执行脚本
+    }
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    /* 2. 在您的 Supabase 项目中创建以下数据表:
+    
+       -- 表: skus
+       CREATE TABLE public.skus (
+           id bigint NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+           created_at timestamp with time zone NOT NULL DEFAULT now(),
+           skuCode text NULL,
+           productName text NULL,
+           supplier text NULL,
+           cost numeric NULL,
+           stock integer NULL,
+           imageUrl text NULL,
+           CONSTRAINT skus_pkey PRIMARY KEY (id)
+       );
+       -- 开启 RLS (Row Level Security)
+       ALTER TABLE public.skus ENABLE ROW LEVEL SECURITY;
+       -- 创建一个策略，允许所有用户进行所有操作（为了方便测试，生产环境应设置更严格的规则）
+       CREATE POLICY "Enable all access for all users" ON public.skus FOR ALL USING (true) WITH CHECK (true);
+
+       -- 表: boms
+       CREATE TABLE public.boms (
+           id bigint NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+           created_at timestamp with time zone NOT NULL DEFAULT now(),
+           finishedProductSkuId bigint NULL,
+           components jsonb NULL,
+           CONSTRAINT boms_pkey PRIMARY KEY (id),
+           CONSTRAINT boms_finishedProductSkuId_fkey FOREIGN KEY (finishedProductSkuId) REFERENCES skus(id) ON DELETE CASCADE
+       );
+       -- 开启 RLS
+       ALTER TABLE public.boms ENABLE ROW LEVEL SECURITY;
+       -- 创建策略
+       CREATE POLICY "Enable all access for all users" ON public.boms FOR ALL USING (true) WITH CHECK (true);
+    */
+
+
+    // ------------------- 状态管理 -------------------
+    let skus = [];
+    let boms = [];
+
+    let currentEditingSkuId = null;
+    let currentEditingBomId = null;
+    let deleteCallback = null;
+
+    // ------------------- DOM 元素获取 -------------------
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const pages = document.querySelectorAll('.page');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const skuModal = document.getElementById('sku-modal');
+    const skuForm = document.getElementById('sku-form');
+    const bomModal = document.getElementById('bom-modal');
+    const bomForm = document.getElementById('bom-form');
+    const confirmDeleteModal = document.getElementById('confirm-delete-modal');
+
+    // ------------------- 加载状态控制 -------------------
+    const showLoader = () => loadingOverlay.classList.remove('hidden');
+    const hideLoader = () => loadingOverlay.classList.add('hidden');
+
+    // ------------------- 数据获取函数 (Supabase) -------------------
+    const fetchSkus = async () => {
+        try {
+            const { data, error } = await supabaseClient.from('skus').select('*').order('id', { ascending: true });
+            if (error) throw error;
+            skus = data;
+        } catch (error) {
+            console.error('Error fetching SKUs:', error);
+            alert('获取SKU数据失败: ' + error.message);
+        }
+    };
+
+    const fetchBoms = async () => {
+        try {
+            const { data, error } = await supabaseClient.from('boms').select('*').order('id', { ascending: true });
+            if (error) throw error;
+            boms = data;
+        } catch (error) {
+            console.error('Error fetching BOMs:', error);
+            alert('获取BOM数据失败: ' + error.message);
+        }
+    };
+
+    // ------------------- 核心渲染函数 -------------------
+    
+    // 渲染SKU表格
+    const renderSkuTable = (filter = '') => {
+        const tableBody = document.getElementById('sku-table-body');
+        tableBody.innerHTML = '';
+        const filteredSkus = skus.filter(sku => 
+            sku.skuCode.toLowerCase().includes(filter.toLowerCase()) || 
+            sku.productName.toLowerCase().includes(filter.toLowerCase())
+        );
+
+        if (filteredSkus.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="7" class="text-center p-4 text-slate-500">未找到SKU。</td></tr>`;
+            return;
+        }
+
+        filteredSkus.forEach(sku => {
+            const row = `
+                <tr class="border-b hover:bg-slate-50">
+                    <td class="p-3"><img src="${sku.imageUrl || 'https://placehold.co/100x100/CCCCCC/FFFFFF?text=NoImg'}" alt="${sku.productName}" class="w-12 h-12 rounded-md object-cover"></td>
+                    <td class="p-3 font-mono">${sku.skuCode}</td>
+                    <td class="p-3 font-semibold">${sku.productName}</td>
+                    <td class="p-3">${sku.supplier}</td>
+                    <td class="p-3">¥${sku.cost.toFixed(2)}</td>
+                    <td class="p-3 ${sku.stock < 20 ? 'text-orange-500 font-bold' : ''}">${sku.stock}</td>
+                    <td class="p-3">
+                        <button class="edit-sku-btn p-1 text-blue-600 hover:text-blue-800" data-id="${sku.id}" title="编辑">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        </button>
+                        <button class="delete-sku-btn p-1 text-red-600 hover:text-red-800" data-id="${sku.id}" title="删除">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+    };
+
+    // 渲染BOM表格
+    const renderBomTable = (filter = '') => {
+        const tableBody = document.getElementById('bom-table-body');
+        tableBody.innerHTML = '';
+        
+        const filteredBoms = boms.filter(bom => {
+            const product = findSkuById(bom.finishedProductSkuId);
+            return product && (product.skuCode.toLowerCase().includes(filter.toLowerCase()) || product.productName.toLowerCase().includes(filter.toLowerCase()));
+        });
+
+        if (filteredBoms.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-slate-500">未找到BOM。</td></tr>`;
+            return;
+        }
+
+        filteredBoms.forEach(bom => {
+            const product = findSkuById(bom.finishedProductSkuId);
+            if (!product) return;
+            const row = `
+                <tr class="border-b hover:bg-slate-50">
+                    <td class="p-3 font-mono">${product.skuCode}</td>
+                    <td class="p-3 font-semibold">${product.productName}</td>
+                    <td class="p-3">${bom.components.length}</td>
+                    <td class="p-3">
+                        <button class="edit-bom-btn p-1 text-blue-600 hover:text-blue-800" data-id="${bom.id}" title="查看/编辑BOM">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <button class="delete-bom-btn p-1 text-red-600 hover:text-red-800" data-id="${bom.id}" title="删除BOM">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tableBody.innerHTML += row;
+        });
+    };
+
+    // 渲染仪表盘
+    const renderDashboard = () => {
+        document.getElementById('stat-total-sku').textContent = skus.length;
+        document.getElementById('stat-total-bom').textContent = boms.length;
+        
+        const totalCost = skus.reduce((acc, sku) => acc + (sku.cost * sku.stock), 0);
+        document.getElementById('stat-total-cost').textContent = `¥${totalCost.toFixed(2)}`;
+
+        const lowStockSkus = skus.filter(sku => sku.stock < 20);
+        document.getElementById('stat-low-stock').textContent = lowStockSkus.length;
+        
+        const lowStockTableBody = document.getElementById('low-stock-table-body');
+        lowStockTableBody.innerHTML = '';
+        if (lowStockSkus.length === 0) {
+             lowStockTableBody.innerHTML = `<tr><td colspan="4" class="text-center p-4 text-slate-500">所有商品库存充足。</td></tr>`;
+        } else {
+            lowStockSkus.forEach(sku => {
+                const row = `
+                    <tr class="border-b">
+                        <td class="p-3 font-mono">${sku.skuCode}</td>
+                        <td class="p-3">${sku.productName}</td>
+                        <td class="p-3 font-bold text-orange-500">${sku.stock}</td>
+                        <td class="p-3">${sku.supplier}</td>
+                    </tr>
+                `;
+                lowStockTableBody.innerHTML += row;
+            });
+        }
+    };
+    
+    // 渲染所有内容
+    const renderAll = () => {
+        renderSkuTable(document.getElementById('sku-search').value);
+        renderBomTable(document.getElementById('bom-search').value);
+        renderDashboard();
+    };
+
+    // ------------------- 页面导航 -------------------
+    const switchPage = (pageId) => {
+        pages.forEach(page => page.classList.add('hidden'));
+        document.getElementById(`page-${pageId}`).classList.remove('hidden');
+
+        navLinks.forEach(link => {
+            link.classList.remove('active', 'bg-blue-100', 'font-semibold', 'text-slate-700');
+            link.classList.add('text-slate-600');
+        });
+        const activeLink = document.getElementById(`nav-${pageId}`);
+        activeLink.classList.add('active', 'bg-blue-100', 'font-semibold', 'text-slate-700');
+    };
+
+    document.getElementById('nav-dashboard').addEventListener('click', (e) => { e.preventDefault(); switchPage('dashboard'); });
+    document.getElementById('nav-sku').addEventListener('click', (e) => { e.preventDefault(); switchPage('sku'); });
+    document.getElementById('nav-bom').addEventListener('click', (e) => { e.preventDefault(); switchPage('bom'); });
+
+    // ------------------- SKU Modal 和表单逻辑 -------------------
+    const openSkuModal = (skuId = null) => {
+        skuForm.reset();
+        currentEditingSkuId = skuId;
+        if (skuId) {
+            document.getElementById('sku-modal-title').textContent = '编辑SKU';
+            const sku = findSkuById(skuId);
+            document.getElementById('sku-id').value = sku.id;
+            document.getElementById('sku-code').value = sku.skuCode;
+            document.getElementById('sku-name').value = sku.productName;
+            document.getElementById('sku-supplier').value = sku.supplier;
+            document.getElementById('sku-cost').value = sku.cost;
+            document.getElementById('sku-stock').value = sku.stock;
+        } else {
+            document.getElementById('sku-modal-title').textContent = '新增SKU';
+        }
+        skuModal.classList.remove('hidden');
+    };
+    
+    const closeSkuModal = () => skuModal.classList.add('hidden');
+
+    document.getElementById('add-sku-btn').addEventListener('click', () => openSkuModal());
+    document.getElementById('cancel-sku-modal').addEventListener('click', closeSkuModal);
+
+    skuForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const skuData = {
+            skuCode: document.getElementById('sku-code').value,
+            productName: document.getElementById('sku-name').value,
+            supplier: document.getElementById('sku-supplier').value,
+            cost: parseFloat(document.getElementById('sku-cost').value),
+            stock: parseInt(document.getElementById('sku-stock').value),
+            imageUrl: `https://placehold.co/100x100/818CF8/FFFFFF?text=${document.getElementById('sku-code').value.substring(0,3)}`
+        };
+
+        showLoader();
+        try {
+            if (currentEditingSkuId) {
+                // 更新
+                const { error } = await supabaseClient.from('skus').update(skuData).eq('id', currentEditingSkuId);
+                if (error) throw error;
+            } else {
+                // 新增
+                const { error } = await supabaseClient.from('skus').insert([skuData]);
+                if (error) throw error;
+            }
+            await refreshData();
+        } catch (error) {
+            console.error('Error saving SKU:', error);
+            alert('保存SKU失败: ' + error.message);
+        } finally {
+            hideLoader();
+            closeSkuModal();
+        }
+    });
+
+    // ------------------- BOM Modal 和表单逻辑 -------------------
+    let tempBomComponents = [];
+
+    const populateSkuSelect = (selectElement, selectedValue = null, filterFn = () => true) => {
+        selectElement.innerHTML = '<option value="">请选择...</option>';
+        skus.filter(filterFn).forEach(sku => {
+            const option = document.createElement('option');
+            option.value = sku.id;
+            option.textContent = `${sku.skuCode} - ${sku.productName}`;
+            if (selectedValue && sku.id == selectedValue) {
+                option.selected = true;
+            }
+            selectElement.appendChild(option);
+        });
+    };
+    
+    const renderTempBomComponents = () => {
+        const listEl = document.getElementById('bom-components-list');
+        listEl.innerHTML = '';
+        if (tempBomComponents.length === 0) {
+            listEl.innerHTML = '<p class="text-slate-500 text-sm">暂无组件，请从下方添加。</p>';
+            return;
+        }
+
+        tempBomComponents.forEach((comp, index) => {
+            const sku = findSkuById(comp.componentSkuId);
+            if (!sku) return;
+            const item = `
+                <div class="flex items-center justify-between bg-white p-2 rounded-md">
+                    <div>
+                        <p class="font-semibold">${sku.productName}</p>
+                        <p class="text-sm text-slate-500">${sku.skuCode} x ${comp.quantity}</p>
+                    </div>
+                    <button type="button" class="remove-component-btn text-red-500 hover:text-red-700" data-index="${index}" title="移除组件">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+                    </button>
+                </div>`;
+            listEl.innerHTML += item;
+        });
+    };
+
+    const openBomModal = (bomId = null) => {
+        bomForm.reset();
+        currentEditingBomId = bomId;
+        
+        const finishedProductSelect = document.getElementById('bom-finished-product');
+        const componentSkuSelect = document.getElementById('bom-component-sku');
+
+        if (bomId) {
+            document.getElementById('bom-modal-title').textContent = '编辑BOM';
+            const bom = boms.find(b => b.id === bomId);
+            tempBomComponents = bom.components ? [...bom.components] : [];
+            populateSkuSelect(finishedProductSelect, bom.finishedProductSkuId);
+            finishedProductSelect.disabled = true;
+        } else {
+            document.getElementById('bom-modal-title').textContent = '创建BOM';
+            tempBomComponents = [];
+            const skusWithBom = boms.map(b => b.finishedProductSkuId);
+            populateSkuSelect(finishedProductSelect, null, sku => !skusWithBom.includes(sku.id));
+            finishedProductSelect.disabled = false;
+        }
+        
+        populateSkuSelect(componentSkuSelect);
+        renderTempBomComponents();
+        bomModal.classList.remove('hidden');
+    };
+    
+    const closeBomModal = () => bomModal.classList.add('hidden');
+
+    document.getElementById('add-bom-btn').addEventListener('click', () => openBomModal());
+    document.getElementById('cancel-bom-modal').addEventListener('click', closeBomModal);
+    
+    document.getElementById('add-component-btn').addEventListener('click', () => {
+        const skuId = parseInt(document.getElementById('bom-component-sku').value);
+        const quantity = parseInt(document.getElementById('bom-component-qty').value);
+
+        if (!skuId || !quantity || quantity < 1) {
+            alert('请选择有效的组件和数量。');
+            return;
+        }
+        
+        const existingIndex = tempBomComponents.findIndex(c => c.componentSkuId === skuId);
+        if (existingIndex > -1) {
+            tempBomComponents[existingIndex].quantity += quantity;
+        } else {
+            tempBomComponents.push({ componentSkuId: skuId, quantity: quantity });
+        }
+        
+        renderTempBomComponents();
+        document.getElementById('bom-component-sku').value = '';
+        document.getElementById('bom-component-qty').value = '1';
+    });
+
+    document.getElementById('bom-components-list').addEventListener('click', (e) => {
+        if (e.target.closest('.remove-component-btn')) {
+            const index = parseInt(e.target.closest('.remove-component-btn').dataset.index);
+            tempBomComponents.splice(index, 1);
+            renderTempBomComponents();
+        }
+    });
+
+    bomForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const finishedProductSkuId = parseInt(document.getElementById('bom-finished-product').value);
+
+        if (!finishedProductSkuId || tempBomComponents.length === 0) {
+            alert('请选择成品SKU并添加至少一个组件。');
+            return;
+        }
+        
+        const bomData = {
+            finishedProductSkuId,
+            components: tempBomComponents
+        };
+        
+        showLoader();
+        try {
+            if (currentEditingBomId) {
+                const { error } = await supabaseClient.from('boms').update(bomData).eq('id', currentEditingBomId);
+                if (error) throw error;
+            } else {
+                const { error } = await supabaseClient.from('boms').insert([bomData]);
+                if (error) throw error;
+            }
+            await refreshData();
+        } catch(error) {
+             console.error('Error saving BOM:', error);
+            alert('保存BOM失败: ' + error.message);
+        } finally {
+            hideLoader();
+            closeBomModal();
+        }
+    });
+
+    // ------------------- 删除逻辑 -------------------
+    const openDeleteModal = (message, callback) => {
+        document.getElementById('delete-message').textContent = message;
+        deleteCallback = callback;
+        confirmDeleteModal.classList.remove('hidden');
+    };
+    
+    const closeDeleteModal = () => {
+        confirmDeleteModal.classList.add('hidden');
+        deleteCallback = null;
+    };
+
+    document.getElementById('cancel-delete-btn').addEventListener('click', closeDeleteModal);
+    document.getElementById('confirm-delete-btn').addEventListener('click', () => {
+        if (deleteCallback) {
+            deleteCallback();
+        }
+        closeDeleteModal();
+    });
+
+    // ------------------- 事件委托和搜索 -------------------
+    document.body.addEventListener('click', (e) => {
+        // 编辑SKU
+        if (e.target.closest('.edit-sku-btn')) {
+            const id = parseInt(e.target.closest('.edit-sku-btn').dataset.id);
+            openSkuModal(id);
+        }
+        // 删除SKU
+        if (e.target.closest('.delete-sku-btn')) {
+            const id = parseInt(e.target.closest('.delete-sku-btn').dataset.id);
+            const sku = findSkuById(id);
+            const isInBom = boms.some(b => b.finishedProductSkuId === id || (b.components && b.components.some(c => c.componentSkuId === id)));
+            if (isInBom) {
+                alert(`无法删除SKU "${sku.productName}"，因为它正在一个或多个BOM中使用。请先移除相关BOM。`);
+                return;
+            }
+            openDeleteModal(`您确定要删除SKU "${sku.productName}" 吗？`, async () => {
+                showLoader();
+                try {
+                    const { error } = await supabaseClient.from('skus').delete().eq('id', id);
+                    if (error) throw error;
+                    await refreshData();
+                } catch(error) {
+                    console.error('Error deleting SKU:', error);
+                    alert('删除SKU失败: ' + error.message);
+                } finally {
+                    hideLoader();
+                }
+            });
+        }
+        // 编辑BOM
+        if (e.target.closest('.edit-bom-btn')) {
+            const id = parseInt(e.target.closest('.edit-bom-btn').dataset.id);
+            openBomModal(id);
+        }
+        // 删除BOM
+        if (e.target.closest('.delete-bom-btn')) {
+            const id = parseInt(e.target.closest('.delete-bom-btn').dataset.id);
+            const bom = boms.find(b => b.id === id);
+            const product = findSkuById(bom.finishedProductSkuId);
+            openDeleteModal(`您确定要删除成品 "${product.productName}" 的BOM吗？`, async () => {
+                showLoader();
+                 try {
+                    const { error } = await supabaseClient.from('boms').delete().eq('id', id);
+                    if (error) throw error;
+                    await refreshData();
+                } catch(error) {
+                    console.error('Error deleting BOM:', error);
+                    alert('删除BOM失败: ' + error.message);
+                } finally {
+                    hideLoader();
+                }
+            });
+        }
+    });
+
+    document.getElementById('sku-search').addEventListener('input', (e) => renderSkuTable(e.target.value));
+    document.getElementById('bom-search').addEventListener('input', (e) => renderBomTable(e.target.value));
+
+    // ------------------- 辅助函数 -------------------
+    const findSkuById = (id) => skus.find(sku => sku.id === id);
+
+    // ------------------- 初始化 -------------------
+    const refreshData = async () => {
+        showLoader();
+        await fetchSkus();
+        await fetchBoms();
+        renderAll();
+        hideLoader();
+    };
+    
+    refreshData();
+});
+</script>
+
+</body>
+</html>
+
